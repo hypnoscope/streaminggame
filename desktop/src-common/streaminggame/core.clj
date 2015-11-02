@@ -26,6 +26,8 @@
                 :rect 0 0 w h)
          :x x
          :y y
+         :w w
+         :h h
          :is :platform
          :hitbox (rectangle x y w h)))
 
@@ -55,24 +57,45 @@
     (assoc hero :velocity (assoc velocity :y 3))
     hero))
 
-(defn collisions? [x y {:keys [w h] :as hero} entities]
+(defn find-colliding-platform [x y {:keys [w h] :as hero} entities]
   (let [hero-hitbox (rectangle x y w h)]
     (some (fn [platform]
-            (rectangle! hero-hitbox :overlaps (:hitbox platform)))
+            (when (rectangle! hero-hitbox :overlaps (:hitbox platform)) platform))
           (filter (partial is? :platform) entities))))
 
-(defn apply-velocity [{:keys [x y] :as hero} entities]
-  (let [x-velocity (:x (:velocity hero))
-        y-velocity (:y (:velocity hero))
-        new-y-position (+ y-velocity y)
-        new-x-position (+ x-velocity x) ]
+(defn apply-y-velocity-for-colliding-platform [{:keys [h x y velocity] :as hero} platform]
+  (let [top-of-platform (+ (:y platform) (:h platform))
+        bottom-of-platform (- (:y platform) (:h platform))
+        hero-is-above-platform (> (+ y 1) top-of-platform)]
     (assoc hero
-           :y (if (collisions? x new-y-position hero entities)
-                y
-                new-y-position)
-           :x (if (collisions? new-x-position y hero entities)
-                x
-                new-x-position))))
+           :y (if hero-is-above-platform
+                     top-of-platform
+                     (- bottom-of-platform h))
+           :velocity (assoc velocity :y 0))))
+
+(defn apply-y-velocity [{:keys [x y] :as hero} entities]
+  (let [y-velocity (:y (:velocity hero))
+        new-y-position (+ y-velocity y)
+        platform (find-colliding-platform x new-y-position hero entities)]
+    (if platform
+      (apply-y-velocity-for-colliding-platform hero platform)
+      (assoc hero :y new-y-position))))
+
+(defn apply-x-velocity-for-colliding-platform [{:keys [x y w] :as hero} platform]
+  (let [left-of-platform (:x platform)
+        right-of-platform (+ left-of-platform (:w platform))
+        hero-is-left-of-platform (< x left-of-platform)]
+    (assoc hero :x (if hero-is-left-of-platform
+                     (- left-of-platform w)
+                     right-of-platform))))
+
+(defn apply-x-velocity [{:keys [x y] :as hero} entities]
+  (let [x-velocity (:x (:velocity hero))
+        new-x-position (+ x-velocity x)
+        platform (find-colliding-platform new-x-position y hero entities)]
+    (if platform
+      (apply-x-velocity-for-colliding-platform hero platform)
+      (assoc hero :x new-x-position))))
 
 (defscreen main-screen
   :on-show
@@ -93,7 +116,9 @@
                       (-> ent
                           (update-velocity entities)
                           do-jumping
-                          (apply-velocity entities))
+                          (apply-x-velocity entities)
+                          (apply-y-velocity entities)
+                          )
                       ent)) entities))))
 
 (defgame streaminggame-game
