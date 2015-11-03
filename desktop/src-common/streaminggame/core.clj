@@ -7,7 +7,7 @@
 (def gravity-acceleration -0.33)
 (def movement-acceleration 0.66)
 (def max-movement-speed 3)
-(def jump-velocity 4)
+(def jump-velocity 10)
 
 (defn mk-hero [x y w h]
   (assoc (shape :filled
@@ -18,6 +18,7 @@
          :w w
          :h h
          :velocity {:x 0 :y 0}
+         :can-jump? false
          :is :hero))
 
 (defn mk-platform [x y w h]
@@ -48,14 +49,9 @@
                                (key-pressed? :a) (clamp (- x-velocity movement-acceleration) (* -1 max-movement-speed) 0)
                                (key-pressed? :d) (clamp (+ x-velocity movement-acceleration) 0 max-movement-speed)
                                :else 0)
-                          :y (if (< new-y-velocity max-fall-speed)
-                               max-fall-speed
-                               new-y-velocity)})))
-
-(defn do-jumping [{:keys [velocity] :as hero}]
-  (if (key-pressed? :space)
-    (assoc hero :velocity (assoc velocity :y 3))
-    hero))
+                          :y (if (and (key-pressed? :space) (:can-jump? hero))
+                               jump-velocity
+                               (if (< new-y-velocity max-fall-speed) max-fall-speed new-y-velocity))})))
 
 (defn find-colliding-platform [x y {:keys [w h] :as hero} entities]
   (let [hero-hitbox (rectangle x y w h)]
@@ -71,15 +67,18 @@
            :y (if hero-is-above-platform
                      top-of-platform
                      (- bottom-of-platform h))
-           :velocity (assoc velocity :y 0))))
+           :velocity (assoc velocity :y 0)
+           :can-jump? hero-is-above-platform)))
 
-(defn apply-y-velocity [{:keys [x y] :as hero} entities]
+(defn apply-y-velocity [{:keys [x y] :as hero} entities delta-time]
   (let [y-velocity (:y (:velocity hero))
-        new-y-position (+ y-velocity y)
+        new-y-position (+ (* delta-time y-velocity) y)
         platform (find-colliding-platform x new-y-position hero entities)]
     (if platform
       (apply-y-velocity-for-colliding-platform hero platform)
-      (assoc hero :y new-y-position))))
+      (assoc hero
+             :y new-y-position
+             :can-jump? false))))
 
 (defn apply-x-velocity-for-colliding-platform [{:keys [x y w] :as hero} platform]
   (let [left-of-platform (:x platform)
@@ -89,9 +88,9 @@
                      (- left-of-platform w)
                      right-of-platform))))
 
-(defn apply-x-velocity [{:keys [x y] :as hero} entities]
+(defn apply-x-velocity [{:keys [x y] :as hero} entities delta-time]
   (let [x-velocity (:x (:velocity hero))
-        new-x-position (+ x-velocity x)
+        new-x-position (+ (* delta-time x-velocity) x)
         platform (find-colliding-platform new-x-position y hero entities)]
     (if platform
       (apply-x-velocity-for-colliding-platform hero platform)
@@ -110,19 +109,20 @@
   :on-render
   (fn [screen entities]
     (clear!)
-    (render! screen
-             (map (fn [ent]
-                    (if (is? :hero ent)
-                      (-> ent
-                          (update-velocity entities)
-                          do-jumping
-                          (apply-x-velocity entities)
-                          (apply-y-velocity entities)
-                          )
-                      ent)) entities))))
+    (let [delta-time (/ (/ 1 60) (:delta-time screen))]
+      (render! screen
+               (map (fn [ent]
+                      (if (is? :hero ent)
+                        (-> ent
+                            (update-velocity entities)
+                            (apply-x-velocity entities delta-time)
+                            (apply-y-velocity entities delta-time))
+                        ent)) entities)))))
 
 (defgame streaminggame-game
   :on-create
   (fn [this]
     (set-screen! this main-screen)))
 
+;; use in repl to restart game
+;; (on-gl  (set-screen! streaminggame-game  main-screen))
