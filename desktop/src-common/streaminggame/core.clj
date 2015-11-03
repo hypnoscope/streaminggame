@@ -9,6 +9,12 @@
 (def max-movement-speed 3)
 (def jump-velocity 10)
 
+(def seed 100)
+(def random-number-generator (java.util.Random. seed))
+
+(defn random-n! [max-n]
+  (.nextInt random-number-generator max-n))
+
 (defn mk-hero [x y w h]
   (assoc (shape :filled
                 :set-color (color :red)
@@ -31,6 +37,15 @@
          :h h
          :is :platform
          :hitbox (rectangle x y w h)))
+
+(def tiles-per-row 24)
+(def tile-width 16)
+(def tile-height 16)
+
+(defn mk-row [y]
+  (map (fn [n] 
+         (mk-platform (* n tile-width 2) y tile-width tile-height))
+       (range tiles-per-row)))
 
 (defn clamp [n min-n max-n]
   (cond
@@ -96,15 +111,17 @@
       (apply-x-velocity-for-colliding-platform hero platform)
       (assoc hero :x new-x-position))))
 
+(defn update-camera! [{:keys [x y] :as hero} screen]
+  (position! screen (/ (width screen) 2) y)
+  hero)
+
 (defscreen main-screen
   :on-show
   (fn [screen entities]
-    (update! screen :renderer (stage))
-    [(mk-hero 100 700 16 48)
-     (mk-platform 10 10 400 5)
-     (mk-platform 100 100 400 5)
-     (mk-platform 200 200 400 5)
-     (mk-platform 300 300 400 5)])
+    (update! screen
+             :renderer (stage)
+             :camera (orthographic))
+    (cons (mk-hero 100 100 16 48) (mk-row 16)))
 
   :on-render
   (fn [screen entities]
@@ -116,8 +133,13 @@
                         (-> ent
                             (update-velocity entities)
                             (apply-x-velocity entities delta-time)
-                            (apply-y-velocity entities delta-time))
-                        ent)) entities)))))
+                            (apply-y-velocity entities delta-time)
+                            (update-camera! screen))
+                        ent)) entities))))
+  
+  :on-resize
+  (fn [screen entities]
+   (height! screen 800)))
 
 (defgame streaminggame-game
   :on-create
