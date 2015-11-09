@@ -15,6 +15,9 @@
                  [play-clj "0.4.7"]]
   
   :source-paths ["src" "src-common"]
+  :test-paths ["test"]
   :javac-options ["-target" "1.6" "-source" "1.6" "-Xlint:-options"]
   :aot [streaminggame.core.desktop-launcher]
-  :main streaminggame.core.desktop-launcher)
+  :main streaminggame.core.desktop-launcher
+  :profiles {:dev {:dependencies [[midje "1.6.0"]]
+                   :plugins [[lein-midje "3.1.3"]]}})

@@ -9,25 +9,28 @@
 (def max-movement-speed 200)
 (def jump-velocity 600)
 
+(defn get-keys []
+  {:a (key-pressed? :a)
+   :d (key-pressed? :d)
+   :space (key-pressed? :space)})
+
 (defn find-colliding-platform [x y {:keys [w h] :as hero} entities]
   (let [hero-hitbox (rectangle x y w h)]
     (some (fn [platform]
-            (when (rectangle! hero-hitbox :overlaps (:hitbox platform))
-              (do
-                (shape! platform :set-color (color :yellow))
-              platform)))
+            (when (rectangle! hero-hitbox :overlaps (:hitbox platform)) platform))
           (filter (partial utils/is? :platform) entities))))
 
 (defn update-velocity [hero entities dt]
   (let [x-velocity (:x (:velocity hero))
         y-velocity (:y (:velocity hero))
         new-y-velocity (+ y-velocity (* dt gravity-acceleration))
-        change-in-x-acceleration (* dt movement-acceleration)]
+        change-in-x-acceleration (* dt movement-acceleration)
+        keys-pressed (get-keys)]
     (assoc hero :velocity {:x (cond
-                                (key-pressed? :a) (utils/clamp (- x-velocity change-in-x-acceleration) (* -1 max-movement-speed) 0)
-                                (key-pressed? :d) (utils/clamp (+ x-velocity change-in-x-acceleration) 0 max-movement-speed)
+                                (:a keys-pressed) (utils/clamp (- x-velocity change-in-x-acceleration) (* -1 max-movement-speed) 0)
+                                (:d keys-pressed) (utils/clamp (+ x-velocity change-in-x-acceleration) 0 max-movement-speed)
                                 :else 0)
-                           :y (if (and (key-pressed? :space) (:can-jump? hero))
+                           :y (if (and (:space keys-pressed) (:can-jump? hero))
                                 jump-velocity ; TODO - use delta?
                                 (if (< new-y-velocity max-fall-speed) max-fall-speed new-y-velocity))})))
 
