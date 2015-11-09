@@ -1,19 +1,16 @@
 (ns streaminggame.core
   (:require [play-clj.core :refer :all]
             [play-clj.ui :refer :all]
-            [play-clj.math :refer :all]))
+            [play-clj.math :refer :all]
+            [streaminggame.movement :as mv]
+            [streaminggame.level :as level]
+            [streaminggame.utils :as utils]))
 
-(def max-fall-speed -4)
-(def gravity-acceleration -0.33)
-(def movement-acceleration 0.66)
-(def max-movement-speed 3)
-(def jump-velocity 10)
+;(def seed 100)
+;(def random-number-generator (java.util.Random. seed))
 
-(def seed 100)
-(def random-number-generator (java.util.Random. seed))
-
-(defn random-n! [max-n]
-  (.nextInt random-number-generator max-n))
+;(defn random-n! [max-n]
+;  (.nextInt random-number-generator max-n))
 
 (defn mk-hero [x y w h]
   (assoc (shape :filled
@@ -25,121 +22,60 @@
          :h h
          :velocity {:x 0 :y 0}
          :can-jump? false
-         :is :hero))
-
-(defn mk-platform [x y w h]
-  (assoc (shape :filled
-                :set-color (color :green)
-                :rect 0 0 w h)
-         :x x
-         :y y
-         :w w
-         :h h
-         :is :platform
-         :hitbox (rectangle x y w h)))
-
-(def tiles-per-row 24)
-(def tile-width 16)
-(def tile-height 16)
-
-(defn mk-row [y]
-  (map (fn [n] 
-         (mk-platform (* n tile-width 2) y tile-width tile-height))
-       (range tiles-per-row)))
-
-(defn clamp [n min-n max-n]
-  (cond
-    (< n min-n) min-n
-    (> n max-n) max-n
-    :else n))
-
-(defn is? [named ent]
-  (= (:is ent) named))
-
-(defn update-velocity [hero entities]
-  (let [x-velocity (:x (:velocity hero))
-        y-velocity (:y (:velocity hero))
-        new-y-velocity (+ y-velocity gravity-acceleration)]
-    (assoc hero :velocity {:x (cond
-                               (key-pressed? :a) (clamp (- x-velocity movement-acceleration) (* -1 max-movement-speed) 0)
-                               (key-pressed? :d) (clamp (+ x-velocity movement-acceleration) 0 max-movement-speed)
-                               :else 0)
-                          :y (if (and (key-pressed? :space) (:can-jump? hero))
-                               jump-velocity
-                               (if (< new-y-velocity max-fall-speed) max-fall-speed new-y-velocity))})))
-
-(defn find-colliding-platform [x y {:keys [w h] :as hero} entities]
-  (let [hero-hitbox (rectangle x y w h)]
-    (some (fn [platform]
-            (when (rectangle! hero-hitbox :overlaps (:hitbox platform)) platform))
-          (filter (partial is? :platform) entities))))
-
-(defn apply-y-velocity-for-colliding-platform [{:keys [h x y velocity] :as hero} platform]
-  (let [top-of-platform (+ (:y platform) (:h platform))
-        bottom-of-platform (- (:y platform) (:h platform))
-        hero-is-above-platform (> (+ y 1) top-of-platform)]
-    (assoc hero
-           :y (if hero-is-above-platform
-                     top-of-platform
-                     (- bottom-of-platform h))
-           :velocity (assoc velocity :y 0)
-           :can-jump? hero-is-above-platform)))
-
-(defn apply-y-velocity [{:keys [x y] :as hero} entities delta-time]
-  (let [y-velocity (:y (:velocity hero))
-        new-y-position (+ (* delta-time y-velocity) y)
-        platform (find-colliding-platform x new-y-position hero entities)]
-    (if platform
-      (apply-y-velocity-for-colliding-platform hero platform)
-      (assoc hero
-             :y new-y-position
-             :can-jump? false))))
-
-(defn apply-x-velocity-for-colliding-platform [{:keys [x y w] :as hero} platform]
-  (let [left-of-platform (:x platform)
-        right-of-platform (+ left-of-platform (:w platform))
-        hero-is-left-of-platform (< x left-of-platform)]
-    (assoc hero :x (if hero-is-left-of-platform
-                     (- left-of-platform w)
-                     right-of-platform))))
-
-(defn apply-x-velocity [{:keys [x y] :as hero} entities delta-time]
-  (let [x-velocity (:x (:velocity hero))
-        new-x-position (+ (* delta-time x-velocity) x)
-        platform (find-colliding-platform new-x-position y hero entities)]
-    (if platform
-      (apply-x-velocity-for-colliding-platform hero platform)
-      (assoc hero :x new-x-position))))
+         :is :hero
+         :current-plat :no
+         ))
 
 (defn update-camera! [{:keys [x y] :as hero} screen]
-  (position! screen (/ (width screen) 2) y)
+  (let [screen-pos (input->screen screen x y)
+        half-screen-height (/ (height screen) 2)
+        ]
+    (position! screen (/ (width screen) 2) (if (> y (/ (height screen) 2))
+                                             y 
+                                             half-screen-height 
+                                             )))
   hero)
 
 (defscreen main-screen
   :on-show
   (fn [screen entities]
+
     (update! screen
              :renderer (stage)
              :camera (orthographic))
-    (cons (mk-hero 100 100 16 48) (mk-row 16)))
+    (into [] [(mk-hero 300
+                       300
+                       (level/block-size screen)
+                       (* 1.6 (level/block-size screen)))
+              (level/draw-row screen 0 "xxxxxxxxxxxxxxxxxxxx")
+              (level/str->chunk level/level-design-1 1 screen) 
+              (level/str->chunk level/level-design-2 (+ 1 level/blocks-high) screen) 
+              (assoc (label "FPS ??" (color :green)) :x 0 :y 0 :is :fps)]))
 
   :on-render
   (fn [screen entities]
     (clear!)
-    (let [delta-time (/ (/ 1 60) (:delta-time screen))]
+    (let [delta-time (:delta-time screen)]
       (render! screen
                (map (fn [ent]
-                      (if (is? :hero ent)
-                        (-> ent
-                            (update-velocity entities)
-                            (apply-x-velocity entities delta-time)
-                            (apply-y-velocity entities delta-time)
-                            (update-camera! screen))
-                        ent)) entities))))
-  
+                      (cond
+                        (utils/is? :hero ent) (-> ent
+                                                  (mv/update-velocity entities delta-time)
+                                                  (mv/apply-y-velocity entities delta-time)
+                                                  (mv/apply-x-velocity entities delta-time)
+                                                  (update-camera! screen))
+                        (utils/is? :fps ent) (do (doto ent (label! :set-text (str "FPS "
+                                                                                  (game :fps)
+                                                                                  " dt "
+                                                                                  delta-time)))
+                                                 ent)
+                        :else ent))
+                    entities))))
+
   :on-resize
   (fn [screen entities]
-   (height! screen 800)))
+    (height! screen 600)
+    (width! screen 800)))
 
 (defgame streaminggame-game
   :on-create
