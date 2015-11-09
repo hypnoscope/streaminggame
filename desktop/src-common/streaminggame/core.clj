@@ -36,6 +36,15 @@
                                              )))
   hero)
 
+(defn get-hero-pos [entities]
+  (let [hero (first (filter (partial utils/is? :hero) entities))]
+    {:x (:x hero) :y (:y hero)}
+    )
+  )
+
+(def min-delta 0.016)
+(def max-delta (* 3 min-delta))
+
 (defscreen main-screen
   :on-show
   (fn [screen entities]
@@ -55,7 +64,7 @@
   :on-render
   (fn [screen entities]
     (clear!)
-    (let [delta-time (:delta-time screen)]
+    (let [delta-time (utils/clamp (:delta-time screen) min-delta max-delta)]
       (render! screen
                (map (fn [ent]
                       (cond
@@ -64,7 +73,9 @@
                                                   (mv/apply-y-velocity entities delta-time)
                                                   (mv/apply-x-velocity entities delta-time)
                                                   (update-camera! screen))
-                        (utils/is? :fps ent) (do (doto ent (label! :set-text (str "FPS "
+                        (utils/is? :fps ent) (do (doto ent (label! :set-text (str "Position - "
+                                                                                  (get-hero-pos entities)
+                                                                                  " FPS "
                                                                                   (game :fps)
                                                                                   " dt "
                                                                                   delta-time)))

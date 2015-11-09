@@ -61,12 +61,9 @@
                                            (<= y top-of-platform))
         hero-is-left-of-platform (< x left-of-platform)]
     (assoc hero
-           :x (cond
-                (and hero-is-in-line-with-platform
-                     hero-is-left-of-platform) (- left-of-platform w)
-                (and hero-is-in-line-with-platform
-                     (not hero-is-left-of-platform)) right-of-platform
-                :else x))))
+           :x (if hero-is-left-of-platform
+                (- left-of-platform w)
+                right-of-platform))))
 
 (defn apply-x-velocity [{:keys [x y] :as hero} entities delta-time]
   (let [x-velocity (:x (:velocity hero))
